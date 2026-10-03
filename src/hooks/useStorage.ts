@@ -1,26 +1,44 @@
 import { useState, useEffect } from 'react';
-import { storage } from '../services/storage';
+import { Match, Player, Team } from '../types';
+import { db } from '../firebaseConfig';
+import { collection, onSnapshot } from 'firebase/firestore';
 
 export function useStorage() {
-  const [, setTick] = useState(0);
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [activeTeam, setActiveTeam] = useState<Team | null>({ id: 'default-team', name: 'Mi Equipo', code: 'MIE' });
+  const [userRole, setUserRole] = useState<'ADMIN' | 'PLAYER'>('ADMIN');
 
   useEffect(() => {
-    const unsubscribe = storage.subscribe(() => {
-      setTick((t) => t + 1);
+    // Escuchador en tiempo real de Partidos
+    const unsubMatches = onSnapshot(collection(db, 'matches'), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Match[];
+      setMatches(data);
     });
-    return unsubscribe;
+
+    // Escuchador en tiempo real de Jugadores
+    const unsubPlayers = onSnapshot(collection(db, 'players'), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Player[];
+      setPlayers(data);
+    });
+
+    return () => {
+      unsubMatches();
+      unsubPlayers();
+    };
   }, []);
 
-  const activeTeam = storage.getActiveTeam();
-  const teams = storage.getTeams();
-  const userRole = storage.getUserRole();
-  const currentPlayerId = storage.getCurrentPlayerId();
+  const getTeamFinancialOverview = (teamId?: string) => {
+    return { debtors: [] };
+  };
 
   return {
-    storage,
+    storage: {
+      matches,
+      players,
+      getTeamFinancialOverview
+    },
     activeTeam,
-    teams,
-    userRole,
-    currentPlayerId,
+    userRole
   };
 }
