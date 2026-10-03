@@ -40,6 +40,24 @@ function updateState(partial: Partial<CloudSyncState>) {
   syncListeners.forEach((fn) => fn(currentState));
 }
 
+function cleanForFirestore<T extends Record<string, any>>(obj: T): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      if (Array.isArray(value)) {
+        result[key] = value.filter((v) => v !== undefined);
+      } else if (value !== null && typeof value === 'object' && !(value instanceof Date)) {
+        result[key] = cleanForFirestore(value);
+      } else {
+        result[key] = value;
+      }
+    }
+  }
+  return result;
+}
+
+let isInitialized = false;
+
 export const cloudSync = {
   getState(): CloudSyncState {
     return currentState;
@@ -53,6 +71,8 @@ export const cloudSync = {
 
   async init(): Promise<void> {
     if (typeof window === 'undefined') return;
+    if (isInitialized) return;
+    isInitialized = true;
 
     try {
       updateState({ status: 'connecting' });
@@ -71,6 +91,9 @@ export const cloudSync = {
       if (teamsSnap && teamsSnap.empty) {
         console.log('Cloud Firestore is empty. Initializing cloud database with team data...');
         await this.uploadAllLocalDataToCloud();
+      } else {
+        // Ensure any local matches or players not yet in cloud are saved
+        await this.syncPendingLocalData();
       }
 
       // Attach real-time snapshot listeners for multi-device sync
@@ -106,6 +129,23 @@ export const cloudSync = {
         status: navigator.onLine ? 'error' : 'offline', 
         errorMessage: err?.message || 'Error de conexión' 
       });
+    }
+  },
+
+  async syncPendingLocalData(): Promise<void> {
+    try {
+      const backup = storage.exportBackup();
+      for (const m of backup.matches) {
+        await this.saveMatch(m).catch(() => {});
+      }
+      for (const p of backup.players) {
+        await this.savePlayer(p).catch(() => {});
+      }
+      for (const t of backup.teams) {
+        await this.saveTeam(t).catch(() => {});
+      }
+    } catch (e) {
+      console.warn('Initial reconciliation notice:', e);
     }
   },
 
@@ -199,7 +239,7 @@ export const cloudSync = {
     updateState({ status: 'saving' });
     const path = `teams/${team.id}`;
     try {
-      await setDoc(doc(db, 'teams', team.id), team);
+      await setDoc(doc(db, 'teams', team.id), cleanForFirestore(team), { merge: true });
       updateState({ status: 'synced', lastSyncedAt: new Date().toLocaleTimeString() });
     } catch (err) {
       updateState({ status: 'error' });
@@ -223,7 +263,7 @@ export const cloudSync = {
     updateState({ status: 'saving' });
     const path = `players/${player.id}`;
     try {
-      await setDoc(doc(db, 'players', player.id), player);
+      await setDoc(doc(db, 'players', player.id), cleanForFirestore(player), { merge: true });
       updateState({ status: 'synced', lastSyncedAt: new Date().toLocaleTimeString() });
     } catch (err) {
       updateState({ status: 'error' });
@@ -247,7 +287,7 @@ export const cloudSync = {
     updateState({ status: 'saving' });
     const path = `matches/${match.id}`;
     try {
-      await setDoc(doc(db, 'matches', match.id), match);
+      await setDoc(doc(db, 'matches', match.id), cleanForFirestore(match), { merge: true });
       updateState({ status: 'synced', lastSyncedAt: new Date().toLocaleTimeString() });
     } catch (err) {
       updateState({ status: 'error' });
@@ -271,11 +311,7 @@ export const cloudSync = {
     updateState({ status: 'saving' });
     const path = `callups/${callup.id}`;
     try {
-      const cleanData: Record<string, any> = {};
-      Object.entries(callup).forEach(([k, v]) => {
-        if (v !== undefined) cleanData[k] = v;
-      });
-      await setDoc(doc(db, 'callups', callup.id), cleanData, { merge: true });
+      await setDoc(doc(db, 'callups', callup.id), cleanForFirestore(callup), { merge: true });
       updateState({ status: 'synced', lastSyncedAt: new Date().toLocaleTimeString() });
     } catch (err) {
       updateState({ status: 'error' });
@@ -287,7 +323,7 @@ export const cloudSync = {
     updateState({ status: 'saving' });
     const path = `substitutions/${sub.id}`;
     try {
-      await setDoc(doc(db, 'substitutions', sub.id), sub);
+      await setDoc(doc(db, 'substitutions', sub.id), cleanForFirestore(sub), { merge: true });
       updateState({ status: 'synced', lastSyncedAt: new Date().toLocaleTimeString() });
     } catch (err) {
       updateState({ status: 'error' });
@@ -311,7 +347,7 @@ export const cloudSync = {
     updateState({ status: 'saving' });
     const path = `matchPlayerStats/${stat.id}`;
     try {
-      await setDoc(doc(db, 'matchPlayerStats', stat.id), stat);
+      await setDoc(doc(db, 'matchPlayerStats', stat.id), cleanForFirestore(stat), { merge: true });
       updateState({ status: 'synced', lastSyncedAt: new Date().toLocaleTimeString() });
     } catch (err) {
       updateState({ status: 'error' });
@@ -323,7 +359,7 @@ export const cloudSync = {
     updateState({ status: 'saving' });
     const path = `payments/${payment.id}`;
     try {
-      await setDoc(doc(db, 'payments', payment.id), payment);
+      await setDoc(doc(db, 'payments', payment.id), cleanForFirestore(payment), { merge: true });
       updateState({ status: 'synced', lastSyncedAt: new Date().toLocaleTimeString() });
     } catch (err) {
       updateState({ status: 'error' });
@@ -350,19 +386,19 @@ export const cloudSync = {
       const batch = writeBatch(db);
 
       // Teams
-      backup.teams.forEach((t: Team) => batch.set(doc(db, 'teams', t.id), t));
+      backup.teams.forEach((t: Team) => batch.set(doc(db, 'teams', t.id), cleanForFirestore(t), { merge: true }));
       // Players
-      backup.players.forEach((p: Player) => batch.set(doc(db, 'players', p.id), p));
+      backup.players.forEach((p: Player) => batch.set(doc(db, 'players', p.id), cleanForFirestore(p), { merge: true }));
       // Matches
-      backup.matches.forEach((m: Match) => batch.set(doc(db, 'matches', m.id), m));
+      backup.matches.forEach((m: Match) => batch.set(doc(db, 'matches', m.id), cleanForFirestore(m), { merge: true }));
       // Callups
-      backup.callups.forEach((c: Callup) => batch.set(doc(db, 'callups', c.id), c));
+      backup.callups.forEach((c: Callup) => batch.set(doc(db, 'callups', c.id), cleanForFirestore(c), { merge: true }));
       // Substitutions
-      backup.substitutions.forEach((s: Substitution) => batch.set(doc(db, 'substitutions', s.id), s));
+      backup.substitutions.forEach((s: Substitution) => batch.set(doc(db, 'substitutions', s.id), cleanForFirestore(s), { merge: true }));
       // Stats
-      backup.matchPlayerStats.forEach((st: MatchPlayerStat) => batch.set(doc(db, 'matchPlayerStats', st.id), st));
+      backup.matchPlayerStats.forEach((st: MatchPlayerStat) => batch.set(doc(db, 'matchPlayerStats', st.id), cleanForFirestore(st), { merge: true }));
       // Payments
-      backup.payments.forEach((py: Payment) => batch.set(doc(db, 'payments', py.id), py));
+      backup.payments.forEach((py: Payment) => batch.set(doc(db, 'payments', py.id), cleanForFirestore(py), { merge: true }));
 
       await batch.commit();
       console.log('All local data successfully saved in Firestore Cloud!');

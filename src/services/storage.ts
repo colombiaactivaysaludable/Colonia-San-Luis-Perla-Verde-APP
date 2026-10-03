@@ -30,6 +30,7 @@ const STORAGE_KEYS = {
   ACTIVE_TEAM_ID: 'teammaster_active_team_id_v1',
   USER_ROLE: 'teammaster_user_role_v1',
   CURRENT_PLAYER_ID: 'teammaster_current_player_id_v1',
+  DELETED_IDS: 'teammaster_deleted_ids_v1',
 };
 
 // Generic storage helper
@@ -67,6 +68,7 @@ class StorageService {
   private activeTeamId: string = '';
   private userRole: UserRole = 'ADMIN';
   private currentPlayerId: string = '';
+  private deletedIds: Set<string> = new Set();
 
   private listeners: Set<() => void> = new Set();
   private cloudHooks: Set<CloudMutationHook> = new Set();
@@ -90,8 +92,28 @@ class StorageService {
     });
   }
 
+  private markDeleted(id: string) {
+    this.deletedIds.add(id);
+    saveToStorage(STORAGE_KEYS.DELETED_IDS, Array.from(this.deletedIds));
+  }
+
+  private unmarkDeleted(id: string) {
+    if (this.deletedIds.has(id)) {
+      this.deletedIds.delete(id);
+      saveToStorage(STORAGE_KEYS.DELETED_IDS, Array.from(this.deletedIds));
+    }
+  }
+
   public mergeCloudTeams(cloudTeams: Team[]) {
-    this.teams = cloudTeams;
+    if (!cloudTeams || cloudTeams.length === 0) return;
+    const map = new Map<string, Team>();
+    this.teams.forEach((t) => {
+      if (!this.deletedIds.has(t.id)) map.set(t.id, t);
+    });
+    cloudTeams.forEach((t) => {
+      if (!this.deletedIds.has(t.id)) map.set(t.id, t);
+    });
+    this.teams = Array.from(map.values());
     saveToStorage(STORAGE_KEYS.TEAMS, this.teams);
     if (!this.teams.some((t) => t.id === this.activeTeamId) && this.teams.length > 0) {
       this.activeTeamId = this.teams[0].id;
@@ -101,42 +123,87 @@ class StorageService {
   }
 
   public mergeCloudPlayers(cloudPlayers: Player[]) {
-    this.players = cloudPlayers;
+    if (!cloudPlayers || cloudPlayers.length === 0) return;
+    const map = new Map<string, Player>();
+    this.players.forEach((p) => {
+      if (!this.deletedIds.has(p.id)) map.set(p.id, p);
+    });
+    cloudPlayers.forEach((p) => {
+      if (!this.deletedIds.has(p.id)) map.set(p.id, p);
+    });
+    this.players = Array.from(map.values()).sort((a, b) => a.dorsal - b.dorsal);
     saveToStorage(STORAGE_KEYS.PLAYERS, this.players);
     this.notify();
   }
 
   public mergeCloudMatches(cloudMatches: Match[]) {
-    this.matches = cloudMatches;
+    if (!cloudMatches || cloudMatches.length === 0) return;
+    const map = new Map<string, Match>();
+    // Retain local matches that haven't been deleted
+    this.matches.forEach((m) => {
+      if (!this.deletedIds.has(m.id)) map.set(m.id, m);
+    });
+    // Union with cloud matches
+    cloudMatches.forEach((m) => {
+      if (!this.deletedIds.has(m.id)) map.set(m.id, m);
+    });
+    this.matches = Array.from(map.values()).sort(
+      (a, b) => new Date(b.date + ' ' + b.time).getTime() - new Date(a.date + ' ' + a.time).getTime()
+    );
     saveToStorage(STORAGE_KEYS.MATCHES, this.matches);
     this.notify();
   }
 
   public mergeCloudCallups(cloudCallups: Callup[]) {
     if (!cloudCallups || cloudCallups.length === 0) return;
-    // Map using unique matchId_playerId key to prevent duplicates and ensure cloud sync accuracy
     const map = new Map<string, Callup>();
-    this.callups.forEach((c) => map.set(`${c.matchId}_${c.playerId}`, c));
-    cloudCallups.forEach((c) => map.set(`${c.matchId}_${c.playerId}`, c));
+    this.callups.forEach((c) => {
+      if (!this.deletedIds.has(c.id)) map.set(`${c.matchId}_${c.playerId}`, c);
+    });
+    cloudCallups.forEach((c) => {
+      if (!this.deletedIds.has(c.id)) map.set(`${c.matchId}_${c.playerId}`, c);
+    });
     this.callups = Array.from(map.values());
     saveToStorage(STORAGE_KEYS.CALLUPS, this.callups);
     this.notify();
   }
 
   public mergeCloudSubstitutions(cloudSubs: Substitution[]) {
-    this.substitutions = cloudSubs;
+    if (!cloudSubs || cloudSubs.length === 0) return;
+    const map = new Map<string, Substitution>();
+    this.substitutions.forEach((s) => {
+      if (!this.deletedIds.has(s.id)) map.set(s.id, s);
+    });
+    cloudSubs.forEach((s) => {
+      if (!this.deletedIds.has(s.id)) map.set(s.id, s);
+    });
+    this.substitutions = Array.from(map.values()).sort((a, b) => a.minute - b.minute);
     saveToStorage(STORAGE_KEYS.SUBSTITUTIONS, this.substitutions);
     this.notify();
   }
 
   public mergeCloudStats(cloudStats: MatchPlayerStat[]) {
-    this.stats = cloudStats;
+    if (!cloudStats || cloudStats.length === 0) return;
+    const map = new Map<string, MatchPlayerStat>();
+    this.stats.forEach((st) => map.set(st.id, st));
+    cloudStats.forEach((st) => map.set(st.id, st));
+    this.stats = Array.from(map.values());
     saveToStorage(STORAGE_KEYS.STATS, this.stats);
     this.notify();
   }
 
   public mergeCloudPayments(cloudPayments: Payment[]) {
-    this.payments = cloudPayments;
+    if (!cloudPayments || cloudPayments.length === 0) return;
+    const map = new Map<string, Payment>();
+    this.payments.forEach((py) => {
+      if (!this.deletedIds.has(py.id)) map.set(py.id, py);
+    });
+    cloudPayments.forEach((py) => {
+      if (!this.deletedIds.has(py.id)) map.set(py.id, py);
+    });
+    this.payments = Array.from(map.values()).sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
     saveToStorage(STORAGE_KEYS.PAYMENTS, this.payments);
     this.notify();
   }
@@ -161,6 +228,8 @@ class StorageService {
     this.substitutions = loadFromStorage<Substitution[]>(STORAGE_KEYS.SUBSTITUTIONS, initialSubstitutions);
     this.stats = loadFromStorage<MatchPlayerStat[]>(STORAGE_KEYS.STATS, initialMatchPlayerStats);
     this.payments = loadFromStorage<Payment[]>(STORAGE_KEYS.PAYMENTS, initialPayments);
+    const deletedArr = loadFromStorage<string[]>(STORAGE_KEYS.DELETED_IDS, []);
+    this.deletedIds = new Set(deletedArr);
 
     const savedTeamId = localStorage.getItem(STORAGE_KEYS.ACTIVE_TEAM_ID);
     if (savedTeamId && this.teams.some((t) => t.id === savedTeamId)) {
@@ -223,6 +292,7 @@ class StorageService {
       id: `team_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       createdAt: new Date().toISOString(),
     };
+    this.unmarkDeleted(newTeam.id);
     this.teams.push(newTeam);
     saveToStorage(STORAGE_KEYS.TEAMS, this.teams);
     this.setActiveTeamId(newTeam.id);
@@ -263,6 +333,7 @@ class StorageService {
       this.activeTeamId = this.teams[0].id;
       saveToStorage(STORAGE_KEYS.ACTIVE_TEAM_ID, this.activeTeamId);
     }
+    this.markDeleted(id);
     this.dispatchCloudMutation('delete', 'team', id);
     this.notify();
   }
@@ -304,6 +375,7 @@ class StorageService {
       id: `p_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       createdAt: new Date().toISOString(),
     };
+    this.unmarkDeleted(newPlayer.id);
     this.players.push(newPlayer);
     saveToStorage(STORAGE_KEYS.PLAYERS, this.players);
     this.dispatchCloudMutation('save', 'player', newPlayer);
@@ -325,6 +397,7 @@ class StorageService {
     this.stats = this.stats.filter((st) => st.playerId !== id);
     this.payments = this.payments.filter((pay) => pay.playerId !== id);
 
+    this.markDeleted(id);
     saveToStorage(STORAGE_KEYS.PLAYERS, this.players);
     saveToStorage(STORAGE_KEYS.CALLUPS, this.callups);
     saveToStorage(STORAGE_KEYS.STATS, this.stats);
@@ -363,6 +436,7 @@ class StorageService {
       id: `m_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       createdAt: new Date().toISOString(),
     };
+    this.unmarkDeleted(newMatch.id);
     this.matches.unshift(newMatch);
     saveToStorage(STORAGE_KEYS.MATCHES, this.matches);
 
@@ -407,6 +481,7 @@ class StorageService {
     this.substitutions = this.substitutions.filter((s) => s.matchId !== matchId);
     this.stats = this.stats.filter((st) => st.matchId !== matchId);
 
+    this.markDeleted(matchId);
     saveToStorage(STORAGE_KEYS.MATCHES, this.matches);
     saveToStorage(STORAGE_KEYS.CALLUPS, this.callups);
     saveToStorage(STORAGE_KEYS.SUBSTITUTIONS, this.substitutions);
@@ -437,15 +512,18 @@ class StorageService {
           status: 'Convocado',
           absenceReason: undefined,
         };
+        this.dispatchCloudMutation('save', 'callup', updated[idx]);
       } else {
-        updated.push({
+        const newC: Callup = {
           id: `c_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           matchId,
           playerId: player.id,
           teamId: match.teamId,
           status: 'Convocado',
           attended: false,
-        });
+        };
+        updated.push(newC);
+        this.dispatchCloudMutation('save', 'callup', newC);
       }
     });
 
@@ -471,15 +549,18 @@ class StorageService {
           status: targetStatus,
           absenceReason: undefined,
         };
+        this.dispatchCloudMutation('save', 'callup', updated[idx]);
       } else if (convokeAll) {
-        updated.push({
+        const newC: Callup = {
           id: `c_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           matchId,
           playerId: player.id,
           teamId: match.teamId,
           status: 'Convocado',
           attended: false,
-        });
+        };
+        updated.push(newC);
+        this.dispatchCloudMutation('save', 'callup', newC);
       }
     });
 
@@ -506,15 +587,18 @@ class StorageService {
           status: targetStatus,
           absenceReason: isSelected ? undefined : updated[idx].absenceReason,
         };
+        this.dispatchCloudMutation('save', 'callup', updated[idx]);
       } else if (isSelected) {
-        updated.push({
+        const newC: Callup = {
           id: `c_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           matchId,
           playerId: player.id,
           teamId: match.teamId,
           status: 'Convocado',
           attended: false,
-        });
+        };
+        updated.push(newC);
+        this.dispatchCloudMutation('save', 'callup', newC);
       }
     });
 
@@ -640,6 +724,7 @@ class StorageService {
       notes,
     };
 
+    this.unmarkDeleted(newSub.id);
     this.substitutions.push(newSub);
     saveToStorage(STORAGE_KEYS.SUBSTITUTIONS, this.substitutions);
     this.dispatchCloudMutation('save', 'substitution', newSub);
@@ -648,6 +733,7 @@ class StorageService {
 
   public deleteSubstitution(id: string): void {
     this.substitutions = this.substitutions.filter((s) => s.id !== id);
+    this.markDeleted(id);
     saveToStorage(STORAGE_KEYS.SUBSTITUTIONS, this.substitutions);
     this.dispatchCloudMutation('delete', 'substitution', id);
     this.notify();
@@ -746,6 +832,7 @@ class StorageService {
       id: `pay_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       createdAt: new Date().toISOString(),
     };
+    this.unmarkDeleted(newPayment.id);
     this.payments.unshift(newPayment);
     saveToStorage(STORAGE_KEYS.PAYMENTS, this.payments);
     this.dispatchCloudMutation('save', 'payment', newPayment);
@@ -755,6 +842,7 @@ class StorageService {
 
   public deletePayment(id: string): void {
     this.payments = this.payments.filter((p) => p.id !== id);
+    this.markDeleted(id);
     saveToStorage(STORAGE_KEYS.PAYMENTS, this.payments);
     this.dispatchCloudMutation('delete', 'payment', id);
     this.notify();
