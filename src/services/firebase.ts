@@ -1,14 +1,23 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer, Firestore } from 'firebase/firestore';
+import { initializeFirestore, doc, getDoc, setLogLevel, Firestore } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
+
+// Suppress non-critical Firestore SDK network warning logs
+setLogLevel('error');
 
 // Initialize Firebase App singleton
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-// CRITICAL: Initialize Firestore with explicit database ID from config
+// CRITICAL: Initialize Firestore with explicit database ID from config and reliable HTTP long-polling
 const databaseId = (firebaseConfig as { firestoreDatabaseId?: string }).firestoreDatabaseId || '(default)';
-export const db: Firestore = getFirestore(app, databaseId);
+export const db: Firestore = initializeFirestore(
+  app,
+  {
+    experimentalForceLongPolling: true,
+  },
+  databaseId
+);
 export const auth = getAuth(app);
 
 export enum OperationType {
@@ -61,11 +70,11 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 // Test initial connection to Firestore
 export async function testFirestoreConnection(): Promise<boolean> {
   try {
-    await getDocFromServer(doc(db, 'teams', 'team_titanes_01'));
+    await getDoc(doc(db, 'teams', 'team_titanes_01'));
     return true;
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firebase client is offline or network unavailable; offline cache will be used.');
+  } catch (error: any) {
+    if (error?.code === 'unavailable' || (error instanceof Error && error.message.includes('offline'))) {
+      console.warn('Firebase client operating in offline mode or network unavailable; offline cache will be used.');
     }
     return false;
   }

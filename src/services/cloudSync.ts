@@ -59,7 +59,11 @@ export const cloudSync = {
       await testFirestoreConnection();
 
       // Check if cloud already has teams. If empty, perform initial cloud upload
-      const teamsSnap = await getDocs(collection(db, 'teams')).catch((err) => {
+      const teamsSnap = await getDocs(collection(db, 'teams')).catch((err: any) => {
+        if (err?.code === 'unavailable' || (err instanceof Error && err.message.includes('offline'))) {
+          console.warn('Firestore backend currently offline/unavailable; continuing in offline mode.');
+          return null;
+        }
         handleFirestoreError(err, OperationType.LIST, 'teams');
         return null;
       });
