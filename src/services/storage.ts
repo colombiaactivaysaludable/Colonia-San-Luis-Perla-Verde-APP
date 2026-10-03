@@ -7,26 +7,81 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { Match, Player, Callup } from '../types';
 
-// Escuchar cambios en partidos en tiempo real desde Firestore
-export const subscribeToMatches = (callback: (matches: any[]) => void) => {
-  const matchesRef = collection(db, 'matches');
-  return onSnapshot(matchesRef, (snapshot) => {
-    const matches = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
-    callback(matches);
-  }, (error) => {
-    console.error("Error leyendo partidos de Firestore:", error);
-  });
+// 1. LIMPIEZA ABSOLUTA DE MEMORIA LOCAL OBSOLETA
+if (typeof window !== 'undefined') {
+  localStorage.removeItem('matches');
+  localStorage.removeItem('players');
+  localStorage.removeItem('callups');
+  localStorage.removeItem('app_data');
+}
+
+// 2. ESCUCHADORES EN TIEMPO REAL (FIRESTORE)
+
+/**
+ * Suscripción en tiempo real a la colección de Partidos
+ */
+export const subscribeToMatches = (callback: (matches: Match[]) => void) => {
+  return onSnapshot(
+    collection(db, 'matches'),
+    (snapshot) => {
+      const matches = snapshot.docs.map((document) => ({
+        id: document.id,
+        ...document.data(),
+      })) as Match[];
+      callback(matches);
+    },
+    (error) => {
+      console.error('Error al escuchar partidos desde Firestore:', error);
+    }
+  );
 };
 
-// Guardar o actualizar un partido directamente en la nube
-export const saveMatch = async (matchData: any) => {
+/**
+ * Suscripción en tiempo real a la colección de Jugadores
+ */
+export const subscribeToPlayers = (callback: (players: Player[]) => void) => {
+  return onSnapshot(
+    collection(db, 'players'),
+    (snapshot) => {
+      const players = snapshot.docs.map((document) => ({
+        id: document.id,
+        ...document.data(),
+      })) as Player[];
+      callback(players);
+    },
+    (error) => {
+      console.error('Error al escuchar jugadores desde Firestore:', error);
+    }
+  );
+};
+
+/**
+ * Suscripción en tiempo real a la colección de Convocatorias
+ */
+export const subscribeToCallups = (callback: (callups: Callup[]) => void) => {
+  return onSnapshot(
+    collection(db, 'callups'),
+    (snapshot) => {
+      const callups = snapshot.docs.map((document) => document.data() as Callup);
+      callback(callups);
+    },
+    (error) => {
+      console.error('Error al escuchar convocatorias desde Firestore:', error);
+    }
+  );
+};
+
+// 3. OPERACIONES DE ESCRITURA EN LA NUBE
+
+/**
+ * Guarda o actualiza un partido directamente en Firestore
+ */
+export const saveMatch = async (matchData: Partial<Match> & { id?: string }) => {
   const matchId = matchData.id || `m_${Date.now()}`;
   const matchRef = doc(db, 'matches', matchId);
-  
+
   const payload = {
     ...matchData,
     id: matchId,
@@ -37,32 +92,28 @@ export const saveMatch = async (matchData: any) => {
   return matchId;
 };
 
-// Eliminar partido de la nube
+/**
+ * Elimina un partido de Firestore
+ */
 export const deleteMatch = async (matchId: string) => {
-  const matchRef = doc(db, 'matches', matchId);
-  await deleteDoc(matchRef);
+  await deleteDoc(doc(db, 'matches', matchId));
 };
 
-// Escuchar confirmaciones de asistencia (convocatorias) en tiempo real
-export const subscribeToCallups = (callback: (callups: any[]) => void) => {
-  const callupsRef = collection(db, 'callups');
-  return onSnapshot(callupsRef, (snapshot) => {
-    const callups = snapshot.docs.map((doc) => doc.data());
-    callback(callups);
-  }, (error) => {
-    console.error("Error leyendo convocatorias de Firestore:", error);
-  });
-};
-
-// Registrar respuesta de asistencia de un jugador
+/**
+ * Registra o actualiza la asistencia de un jugador
+ */
 export const saveAttendance = async (matchId: string, playerId: string, confirmed: boolean) => {
   const docId = `${matchId}_${playerId}`;
   const callupRef = doc(db, 'callups', docId);
 
-  await setDoc(callupRef, {
-    matchId,
-    playerId,
-    confirmed,
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
+  await setDoc(
+    callupRef,
+    {
+      matchId,
+      playerId,
+      confirmed,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
 };
