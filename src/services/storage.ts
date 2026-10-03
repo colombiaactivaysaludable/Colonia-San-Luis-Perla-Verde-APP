@@ -52,6 +52,10 @@ function saveToStorage<T>(key: string, value: T): void {
   }
 }
 
+export type CloudMutationAction = 'save' | 'delete';
+export type CloudMutationEntity = 'team' | 'player' | 'match' | 'callup' | 'substitution' | 'stat' | 'payment';
+export type CloudMutationHook = (action: CloudMutationAction, entity: CloudMutationEntity, payload: any) => void;
+
 class StorageService {
   private teams: Team[] = [];
   private players: Player[] = [];
@@ -65,9 +69,71 @@ class StorageService {
   private currentPlayerId: string = '';
 
   private listeners: Set<() => void> = new Set();
+  private cloudHooks: Set<CloudMutationHook> = new Set();
 
   constructor() {
     this.init();
+  }
+
+  public onCloudMutation(hook: CloudMutationHook): () => void {
+    this.cloudHooks.add(hook);
+    return () => this.cloudHooks.delete(hook);
+  }
+
+  private dispatchCloudMutation(action: CloudMutationAction, entity: CloudMutationEntity, payload: any) {
+    this.cloudHooks.forEach((fn) => {
+      try {
+        fn(action, entity, payload);
+      } catch (err) {
+        console.warn('Cloud sync dispatch warning:', err);
+      }
+    });
+  }
+
+  public mergeCloudTeams(cloudTeams: Team[]) {
+    this.teams = cloudTeams;
+    saveToStorage(STORAGE_KEYS.TEAMS, this.teams);
+    if (!this.teams.some((t) => t.id === this.activeTeamId) && this.teams.length > 0) {
+      this.activeTeamId = this.teams[0].id;
+      saveToStorage(STORAGE_KEYS.ACTIVE_TEAM_ID, this.activeTeamId);
+    }
+    this.notify();
+  }
+
+  public mergeCloudPlayers(cloudPlayers: Player[]) {
+    this.players = cloudPlayers;
+    saveToStorage(STORAGE_KEYS.PLAYERS, this.players);
+    this.notify();
+  }
+
+  public mergeCloudMatches(cloudMatches: Match[]) {
+    this.matches = cloudMatches;
+    saveToStorage(STORAGE_KEYS.MATCHES, this.matches);
+    this.notify();
+  }
+
+  public mergeCloudCallups(cloudCallups: Callup[]) {
+    this.callups = cloudCallups;
+    saveToStorage(STORAGE_KEYS.CALLUPS, this.callups);
+    this.notify();
+  }
+
+  public mergeCloudSubstitutions(cloudSubs: Substitution[]) {
+    this.substitutions = cloudSubs;
+    saveToStorage(STORAGE_KEYS.SUBSTITUTIONS, this.substitutions);
+    this.notify();
+  }
+
+  public mergeCloudStats(cloudStats: MatchPlayerStat[]) {
+    this.stats = cloudStats;
+    saveToStorage(STORAGE_KEYS.STATS, this.stats);
+    this.notify();
+  }
+
+  public mergeCloudPayments(cloudPayments: Payment[]) {
+    this.payments = cloudPayments;
+    saveToStorage(STORAGE_KEYS.PAYMENTS, this.payments);
+    this.notify();
   }
 
   private init() {
@@ -155,6 +221,7 @@ class StorageService {
     this.teams.push(newTeam);
     saveToStorage(STORAGE_KEYS.TEAMS, this.teams);
     this.setActiveTeamId(newTeam.id);
+    this.dispatchCloudMutation('save', 'team', newTeam);
     this.notify();
     return newTeam;
   }
@@ -162,6 +229,8 @@ class StorageService {
   public updateTeam(id: string, updates: Partial<Team>): void {
     this.teams = this.teams.map((t) => (t.id === id ? { ...t, ...updates } : t));
     saveToStorage(STORAGE_KEYS.TEAMS, this.teams);
+    const updated = this.teams.find((t) => t.id === id);
+    if (updated) this.dispatchCloudMutation('save', 'team', updated);
     this.notify();
   }
 
@@ -189,6 +258,7 @@ class StorageService {
       this.activeTeamId = this.teams[0].id;
       saveToStorage(STORAGE_KEYS.ACTIVE_TEAM_ID, this.activeTeamId);
     }
+    this.dispatchCloudMutation('delete', 'team', id);
     this.notify();
   }
 
@@ -231,6 +301,7 @@ class StorageService {
     };
     this.players.push(newPlayer);
     saveToStorage(STORAGE_KEYS.PLAYERS, this.players);
+    this.dispatchCloudMutation('save', 'player', newPlayer);
     this.notify();
     return newPlayer;
   }
@@ -238,6 +309,8 @@ class StorageService {
   public updatePlayer(id: string, updates: Partial<Player>): void {
     this.players = this.players.map((p) => (p.id === id ? { ...p, ...updates } : p));
     saveToStorage(STORAGE_KEYS.PLAYERS, this.players);
+    const updated = this.players.find((p) => p.id === id);
+    if (updated) this.dispatchCloudMutation('save', 'player', updated);
     this.notify();
   }
 
@@ -251,6 +324,7 @@ class StorageService {
     saveToStorage(STORAGE_KEYS.CALLUPS, this.callups);
     saveToStorage(STORAGE_KEYS.STATS, this.stats);
     saveToStorage(STORAGE_KEYS.PAYMENTS, this.payments);
+    this.dispatchCloudMutation('delete', 'player', id);
     this.notify();
   }
 
@@ -291,6 +365,7 @@ class StorageService {
       this.setCallupsForMatch(newMatch.id, initialCalledUpPlayerIds);
     }
 
+    this.dispatchCloudMutation('save', 'match', newMatch);
     this.notify();
     return newMatch;
   }
@@ -298,6 +373,8 @@ class StorageService {
   public updateMatch(id: string, updates: Partial<Match>): void {
     this.matches = this.matches.map((m) => (m.id === id ? { ...m, ...updates } : m));
     saveToStorage(STORAGE_KEYS.MATCHES, this.matches);
+    const updated = this.matches.find((m) => m.id === id);
+    if (updated) this.dispatchCloudMutation('save', 'match', updated);
     this.notify();
   }
 
@@ -314,6 +391,8 @@ class StorageService {
       return m;
     });
     saveToStorage(STORAGE_KEYS.MATCHES, this.matches);
+    const updated = this.matches.find((m) => m.id === matchId);
+    if (updated) this.dispatchCloudMutation('save', 'match', updated);
     this.notify();
   }
 
@@ -327,6 +406,7 @@ class StorageService {
     saveToStorage(STORAGE_KEYS.CALLUPS, this.callups);
     saveToStorage(STORAGE_KEYS.SUBSTITUTIONS, this.substitutions);
     saveToStorage(STORAGE_KEYS.STATS, this.stats);
+    this.dispatchCloudMutation('delete', 'match', matchId);
     this.notify();
   }
 
@@ -447,6 +527,7 @@ class StorageService {
     const match = this.getMatchById(matchId);
     if (!match) return;
 
+    let targetCallup: Callup;
     const idx = this.callups.findIndex((c) => c.matchId === matchId && c.playerId === playerId);
     if (idx >= 0) {
       this.callups[idx] = {
@@ -454,8 +535,9 @@ class StorageService {
         status,
         absenceReason: status === 'Inasistencia' ? absenceReason : undefined,
       };
+      targetCallup = this.callups[idx];
     } else {
-      this.callups.push({
+      targetCallup = {
         id: `c_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         matchId,
         playerId,
@@ -463,10 +545,12 @@ class StorageService {
         status,
         absenceReason: status === 'Inasistencia' ? absenceReason : undefined,
         attended: false,
-      });
+      };
+      this.callups.push(targetCallup);
     }
 
     saveToStorage(STORAGE_KEYS.CALLUPS, this.callups);
+    this.dispatchCloudMutation('save', 'callup', targetCallup);
     this.notify();
   }
 
@@ -479,6 +563,7 @@ class StorageService {
     const match = this.getMatchById(matchId);
     if (!match) return;
 
+    let targetCallup: Callup;
     const idx = this.callups.findIndex((c) => c.matchId === matchId && c.playerId === playerId);
     const nowStr = new Date().toISOString();
 
@@ -490,8 +575,9 @@ class StorageService {
         absenceReason: confirmation === 'No Asiste' ? reason : undefined,
         confirmedAt: nowStr,
       };
+      targetCallup = this.callups[idx];
     } else {
-      this.callups.push({
+      targetCallup = {
         id: `c_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         matchId,
         playerId,
@@ -501,10 +587,12 @@ class StorageService {
         absenceReason: confirmation === 'No Asiste' ? reason : undefined,
         confirmedAt: nowStr,
         attended: false,
-      });
+      };
+      this.callups.push(targetCallup);
     }
 
     saveToStorage(STORAGE_KEYS.CALLUPS, this.callups);
+    this.dispatchCloudMutation('save', 'callup', targetCallup);
     this.notify();
   }
 
@@ -540,12 +628,14 @@ class StorageService {
 
     this.substitutions.push(newSub);
     saveToStorage(STORAGE_KEYS.SUBSTITUTIONS, this.substitutions);
+    this.dispatchCloudMutation('save', 'substitution', newSub);
     this.notify();
   }
 
   public deleteSubstitution(id: string): void {
     this.substitutions = this.substitutions.filter((s) => s.id !== id);
     saveToStorage(STORAGE_KEYS.SUBSTITUTIONS, this.substitutions);
+    this.dispatchCloudMutation('delete', 'substitution', id);
     this.notify();
   }
 
@@ -592,9 +682,12 @@ class StorageService {
         m.id === matchId ? { ...m, homeScore: totalGoalsInMatch } : m
       );
       saveToStorage(STORAGE_KEYS.MATCHES, this.matches);
+      const updatedMatch = this.matches.find((m) => m.id === matchId);
+      if (updatedMatch) this.dispatchCloudMutation('save', 'match', updatedMatch);
     }
 
     saveToStorage(STORAGE_KEYS.STATS, this.stats);
+    this.dispatchCloudMutation('save', 'stat', stat);
     this.notify();
   }
 
@@ -641,6 +734,7 @@ class StorageService {
     };
     this.payments.unshift(newPayment);
     saveToStorage(STORAGE_KEYS.PAYMENTS, this.payments);
+    this.dispatchCloudMutation('save', 'payment', newPayment);
     this.notify();
     return newPayment;
   }
@@ -648,6 +742,7 @@ class StorageService {
   public deletePayment(id: string): void {
     this.payments = this.payments.filter((p) => p.id !== id);
     saveToStorage(STORAGE_KEYS.PAYMENTS, this.payments);
+    this.dispatchCloudMutation('delete', 'payment', id);
     this.notify();
   }
 
@@ -744,18 +839,46 @@ class StorageService {
     };
   }
 
-  public importBackup(backup: AppDataBackup): void {
-    if (!backup || !Array.isArray(backup.teams) || !Array.isArray(backup.players)) {
-      throw new Error('Archivo de copia de seguridad inválido o formato no soportado.');
+  public importBackup(rawBackup: any): { teamsCount: number; playersCount: number; matchesCount: number } {
+    if (!rawBackup || typeof rawBackup !== 'object') {
+      throw new Error('El archivo no contiene un objeto JSON válido.');
     }
 
-    this.teams = backup.teams;
-    this.players = backup.players;
-    this.matches = backup.matches || [];
-    this.callups = backup.callups || [];
-    this.substitutions = backup.substitutions || [];
-    this.stats = backup.matchPlayerStats || [];
-    this.payments = backup.payments || [];
+    // Unwrap if wrapped under 'data', 'backup', 'payload', or directly
+    const backup = rawBackup.data || rawBackup.backup || rawBackup.payload || rawBackup;
+
+    // Handle teams
+    let importedTeams: Team[] = [];
+    if (Array.isArray(backup.teams) && backup.teams.length > 0) {
+      importedTeams = backup.teams;
+    } else if (this.teams.length > 0) {
+      importedTeams = this.teams;
+    } else {
+      importedTeams = initialTeams;
+    }
+
+    const importedPlayers: Player[] = Array.isArray(backup.players) ? backup.players : [];
+    const importedMatches: Match[] = Array.isArray(backup.matches) ? backup.matches : [];
+    const importedCallups: Callup[] = Array.isArray(backup.callups) ? backup.callups : [];
+    const importedSubstitutions: Substitution[] = Array.isArray(backup.substitutions) ? backup.substitutions : [];
+    const importedStats: MatchPlayerStat[] = Array.isArray(backup.matchPlayerStats) 
+      ? backup.matchPlayerStats 
+      : Array.isArray(backup.stats) 
+      ? backup.stats 
+      : [];
+    const importedPayments: Payment[] = Array.isArray(backup.payments) ? backup.payments : [];
+
+    if (importedTeams.length === 0 && importedPlayers.length === 0 && importedMatches.length === 0) {
+      throw new Error('El archivo de respaldo no contiene datos de equipos, jugadores ni partidos.');
+    }
+
+    this.teams = importedTeams;
+    this.players = importedPlayers;
+    this.matches = importedMatches;
+    this.callups = importedCallups;
+    this.substitutions = importedSubstitutions;
+    this.stats = importedStats;
+    this.payments = importedPayments;
 
     saveToStorage(STORAGE_KEYS.TEAMS, this.teams);
     saveToStorage(STORAGE_KEYS.PLAYERS, this.players);
@@ -769,6 +892,12 @@ class StorageService {
       this.setActiveTeamId(this.teams[0].id);
     }
     this.notify();
+
+    return {
+      teamsCount: this.teams.length,
+      playersCount: this.players.length,
+      matchesCount: this.matches.length,
+    };
   }
 
   public resetToDefault(): void {

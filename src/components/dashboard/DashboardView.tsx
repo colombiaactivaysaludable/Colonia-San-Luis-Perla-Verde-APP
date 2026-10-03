@@ -73,8 +73,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* 1-Click Direct Install Bar (Android, Apple, Mac) */}
-      <DirectInstallBar variant="banner" />
+      {/* 1-Click PWA Web Install Bar */}
+      <DirectInstallBar variant="banner" onOpenModal={onOpenInstallModal} />
 
       {/* Team Welcome Banner */}
       <div 

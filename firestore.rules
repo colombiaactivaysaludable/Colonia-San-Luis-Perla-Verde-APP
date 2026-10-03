@@ -1,0 +1,182 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Common security primitives
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Blueprints ---
+
+    function isValidTeam(data) {
+      return data.id is string && isValidId(data.id)
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 120
+        && data.category is string && data.category.size() <= 60
+        && data.primaryColor is string && data.primaryColor.size() <= 30
+        && data.shieldIcon is string && data.shieldIcon.size() <= 30
+        && (!('slogan' in data) || (data.slogan is string && data.slogan.size() <= 150))
+        && (!('secondaryColor' in data) || (data.secondaryColor is string && data.secondaryColor.size() <= 30))
+        && (!('coachName' in data) || (data.coachName is string && data.coachName.size() <= 100))
+        && (!('foundedYear' in data) || (data.foundedYear is string && data.foundedYear.size() <= 10))
+        && (!('defaultArrivalMinutes' in data) || (data.defaultArrivalMinutes is number && data.defaultArrivalMinutes >= 0 && data.defaultArrivalMinutes <= 180))
+        && (!('logoUrl' in data) || (data.logoUrl is string && data.logoUrl.size() <= 2048))
+        && (!('customHashtag' in data) || (data.customHashtag is string && data.customHashtag.size() <= 50))
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50));
+    }
+
+    function isValidPlayer(data) {
+      return data.id is string && isValidId(data.id)
+        && data.teamId is string && isValidId(data.teamId)
+        && data.fullName is string && data.fullName.size() > 0 && data.fullName.size() <= 120
+        && data.dorsal is number && data.dorsal >= 0 && data.dorsal <= 999
+        && data.position is string && data.position in ['Arquero', 'Defensa', 'Volante', 'Delantero']
+        && data.status is string && data.status in ['Activo', 'Lesionado', 'Sancionado', 'Inactivo']
+        && data.phone is string && data.phone.size() <= 30
+        && (!('nickname' in data) || (data.nickname is string && data.nickname.size() <= 60))
+        && (!('documentNumber' in data) || (data.documentNumber is string && data.documentNumber.size() <= 40))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 500))
+        && (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 2048))
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50));
+    }
+
+    function isValidMatch(data) {
+      return data.id is string && isValidId(data.id)
+        && data.teamId is string && isValidId(data.teamId)
+        && data.tournament is string && data.tournament.size() > 0 && data.tournament.size() <= 100
+        && data.rival is string && data.rival.size() <= 100
+        && data.date is string && data.date.size() <= 20
+        && data.time is string && data.time.size() <= 10
+        && data.venue is string && data.venue.size() <= 120
+        && data.status is string && data.status in ['Programado', 'En Juego', 'Finalizado', 'Cancelado']
+        && (!('totalRefereeFee' in data) || (data.totalRefereeFee is number && data.totalRefereeFee >= 0))
+        && (!('individualRefereeFee' in data) || (data.individualRefereeFee is number && data.individualRefereeFee >= 0))
+        && (!('arrivalMinutes' in data) || (data.arrivalMinutes is number && data.arrivalMinutes >= 0 && data.arrivalMinutes <= 180))
+        && (!('requiredEquipment' in data) || (data.requiredEquipment is list && data.requiredEquipment.size() <= 20))
+        && (!('customEquipment' in data) || (data.customEquipment is string && data.customEquipment.size() <= 100))
+        && (!('confirmationDeadline' in data) || (data.confirmationDeadline is string && data.confirmationDeadline.size() <= 50))
+        && (!('homeScore' in data) || (data.homeScore is number && data.homeScore >= 0))
+        && (!('awayScore' in data) || (data.awayScore is number && data.awayScore >= 0))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 500))
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50));
+    }
+
+    function isValidCallup(data) {
+      return data.id is string && isValidId(data.id)
+        && data.matchId is string && isValidId(data.matchId)
+        && data.playerId is string && isValidId(data.playerId)
+        && data.teamId is string && isValidId(data.teamId)
+        && data.status is string && data.status in ['Convocado', 'No Convocado', 'Inasistencia']
+        && (!('confirmationStatus' in data) || (data.confirmationStatus is string && data.confirmationStatus in ['Confirmado', 'No Asiste', 'Pendiente']))
+        && (!('absenceReason' in data) || (data.absenceReason is string && data.absenceReason.size() <= 100))
+        && (!('confirmedAt' in data) || (data.confirmedAt is string && data.confirmedAt.size() <= 50))
+        && (!('attended' in data) || (data.attended is bool));
+    }
+
+    function isValidSubstitution(data) {
+      return data.id is string && isValidId(data.id)
+        && data.matchId is string && isValidId(data.matchId)
+        && data.teamId is string && isValidId(data.teamId)
+        && data.playerOutId is string && isValidId(data.playerOutId)
+        && data.playerInId is string && isValidId(data.playerInId)
+        && data.minute is number && data.minute >= 0 && data.minute <= 180
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 200));
+    }
+
+    function isValidStat(data) {
+      return data.id is string && isValidId(data.id)
+        && data.matchId is string && isValidId(data.matchId)
+        && data.playerId is string && isValidId(data.playerId)
+        && data.teamId is string && isValidId(data.teamId)
+        && data.goals is number && data.goals >= 0 && data.goals <= 50
+        && data.assists is number && data.assists >= 0 && data.assists <= 50
+        && data.yellowCards is number && data.yellowCards >= 0 && data.yellowCards <= 10
+        && data.redCards is number && data.redCards >= 0 && data.redCards <= 5
+        && (!('minutesPlayed' in data) || (data.minutesPlayed is number && data.minutesPlayed >= 0 && data.minutesPlayed <= 180));
+    }
+
+    function isValidPayment(data) {
+      return data.id is string && isValidId(data.id)
+        && data.teamId is string && isValidId(data.teamId)
+        && data.playerId is string && isValidId(data.playerId)
+        && data.amount is number && data.amount >= 0 && data.amount <= 100000000
+        && data.date is string && data.date.size() <= 20
+        && data.paymentMethod is string && data.paymentMethod.size() <= 40
+        && data.concept is string && data.concept.size() > 0 && data.concept.size() <= 120
+        && (!('matchId' in data) || (data.matchId is string && isValidId(data.matchId)))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 200))
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50));
+    }
+
+    // --- Collections Match Rules ---
+
+    match /teams/{teamId} {
+      allow get: if isValidId(teamId);
+      allow list: if true;
+      allow create: if isValidId(teamId) && isValidTeam(incoming()) && incoming().id == teamId;
+      allow update: if isValidId(teamId) && isValidTeam(incoming()) && incoming().id == existing().id;
+      allow delete: if isValidId(teamId);
+    }
+
+    match /players/{playerId} {
+      allow get: if isValidId(playerId);
+      allow list: if true;
+      allow create: if isValidId(playerId) && isValidPlayer(incoming()) && incoming().id == playerId;
+      allow update: if isValidId(playerId) && isValidPlayer(incoming()) && incoming().id == existing().id && incoming().teamId == existing().teamId;
+      allow delete: if isValidId(playerId);
+    }
+
+    match /matches/{matchId} {
+      allow get: if isValidId(matchId);
+      allow list: if true;
+      allow create: if isValidId(matchId) && isValidMatch(incoming()) && incoming().id == matchId;
+      allow update: if isValidId(matchId) && isValidMatch(incoming()) && incoming().id == existing().id && incoming().teamId == existing().teamId;
+      allow delete: if isValidId(matchId);
+    }
+
+    match /callups/{callupId} {
+      allow get: if isValidId(callupId);
+      allow list: if true;
+      allow create: if isValidId(callupId) && isValidCallup(incoming()) && incoming().id == callupId;
+      allow update: if isValidId(callupId) && isValidCallup(incoming()) && incoming().id == existing().id && incoming().matchId == existing().matchId && incoming().playerId == existing().playerId;
+      allow delete: if isValidId(callupId);
+    }
+
+    match /substitutions/{subId} {
+      allow get: if isValidId(subId);
+      allow list: if true;
+      allow create: if isValidId(subId) && isValidSubstitution(incoming()) && incoming().id == subId;
+      allow update: if isValidId(subId) && isValidSubstitution(incoming()) && incoming().id == existing().id && incoming().matchId == existing().matchId;
+      allow delete: if isValidId(subId);
+    }
+
+    match /matchPlayerStats/{statId} {
+      allow get: if isValidId(statId);
+      allow list: if true;
+      allow create: if isValidId(statId) && isValidStat(incoming()) && incoming().id == statId;
+      allow update: if isValidId(statId) && isValidStat(incoming()) && incoming().id == existing().id && incoming().matchId == existing().matchId && incoming().playerId == existing().playerId;
+      allow delete: if isValidId(statId);
+    }
+
+    match /payments/{paymentId} {
+      allow get: if isValidId(paymentId);
+      allow list: if true;
+      allow create: if isValidId(paymentId) && isValidPayment(incoming()) && incoming().id == paymentId;
+      allow update: if isValidId(paymentId) && isValidPayment(incoming()) && incoming().id == existing().id && incoming().teamId == existing().teamId;
+      allow delete: if isValidId(paymentId);
+    }
+  }
+}

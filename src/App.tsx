@@ -5,7 +5,6 @@ import { TopAppBar } from './components/TopAppBar';
 import { TeamSelectorModal } from './components/TeamSelectorModal';
 import { RoleSelectorModal } from './components/RoleSelectorModal';
 import { BackupModal } from './components/BackupModal';
-import { KotlinCodeModal } from './components/KotlinCodeModal';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { MatchesView } from './components/matches/MatchesView';
 import { PlayerList } from './components/players/PlayerList';
@@ -24,6 +23,7 @@ import { MatchdayGraphicModal } from './components/matches/MatchdayGraphicModal'
 import { PublicConfirmationView } from './components/public/PublicConfirmationView';
 import { Match, Player } from './types';
 import { WifiOff, Smartphone, Sparkles, User, Award, ShieldAlert, Download } from 'lucide-react';
+import { cloudSync } from './services/cloudSync';
 
 export default function App() {
   const { storage, activeTeam, userRole } = useStorage();
@@ -48,6 +48,9 @@ export default function App() {
   const [publicMatchId, setPublicMatchId] = useState<string | null>(extractConfirmationMatchId);
 
   useEffect(() => {
+    // Initialize Cloud Firestore synchronization
+    cloudSync.init();
+
     const handleUrlChange = () => {
       setPublicMatchId(extractConfirmationMatchId());
     };
@@ -63,7 +66,6 @@ export default function App() {
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [showBackupModal, setShowBackupModal] = useState(false);
-  const [showKotlinModal, setShowKotlinModal] = useState(false);
   const [showInstallModal, setShowInstallModal] = useState(false);
 
   // Match Modals
@@ -205,7 +207,6 @@ export default function App() {
           onOpenTeamModal={() => setShowTeamModal(true)}
           onOpenRoleModal={() => setShowRoleModal(true)}
           onOpenBackupModal={() => setShowBackupModal(true)}
-          onOpenKotlinModal={() => setShowKotlinModal(true)}
           onOpenInstallModal={() => setShowInstallModal(true)}
           isMobileFrame={isMobileFrame}
           onToggleMobileFrame={() => setIsMobileFrame(!isMobileFrame)}
@@ -238,12 +239,6 @@ export default function App() {
       <BackupModal
         isOpen={showBackupModal}
         onClose={() => setShowBackupModal(false)}
-      />
-
-      {/* Kotlin Code Viewer Modal */}
-      <KotlinCodeModal
-        isOpen={showKotlinModal}
-        onClose={() => setShowKotlinModal(false)}
       />
 
       {/* Convocatoria Masiva 1-Clic & WhatsApp Modal */}

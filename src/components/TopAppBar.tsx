@@ -1,26 +1,28 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ChevronDown, 
   Smartphone, 
   Monitor, 
   Database, 
-  Code2, 
   UserCheck, 
   Plus, 
   Edit3, 
   Trash2,
   Shield,
   Sparkles,
-  Download
+  Download,
+  Cloud,
+  CloudOff,
+  RefreshCw
 } from 'lucide-react';
 import { useStorage } from '../hooks/useStorage';
 import { Team, UserRole } from '../types';
+import { cloudSync, CloudSyncStatus } from '../services/cloudSync';
 
 interface TopAppBarProps {
   onOpenTeamModal: () => void;
   onOpenRoleModal: () => void;
   onOpenBackupModal: () => void;
-  onOpenKotlinModal: () => void;
   onOpenInstallModal: () => void;
   isMobileFrame: boolean;
   onToggleMobileFrame: () => void;
@@ -30,13 +32,27 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
   onOpenTeamModal,
   onOpenRoleModal,
   onOpenBackupModal,
-  onOpenKotlinModal,
   onOpenInstallModal,
   isMobileFrame,
   onToggleMobileFrame,
 }) => {
   const { activeTeam, teams, storage, userRole } = useStorage();
   const [showTeamDropdown, setShowTeamDropdown] = useState(false);
+  const [syncState, setSyncState] = useState(cloudSync.getState());
+
+  useEffect(() => {
+    return cloudSync.subscribe((state) => {
+      setSyncState(state);
+    });
+  }, []);
+
+  const handleManualSync = async () => {
+    try {
+      await cloudSync.uploadAllLocalDataToCloud();
+    } catch (e) {
+      console.warn('Manual sync warning:', e);
+    }
+  };
 
   const getRoleBadge = (role: UserRole) => {
     switch (role) {
@@ -137,14 +153,14 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
 
         {/* Right Actions & Role Selector */}
         <div className="flex items-center gap-1 sm:gap-2">
-          {/* Direct Install Button for Android, Apple, Mac */}
+          {/* Direct PWA Web Install Button */}
           <button
             onClick={onOpenInstallModal}
             className="py-1 px-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-950/40 flex items-center gap-1.5 transition-all active:scale-95 ring-1 ring-emerald-300/30"
-            title="Instalar App directamente a Android, Apple o Mac de una"
+            title="Instalar App Web Progresiva (PWA) en tu dispositivo"
           >
             <Download className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Instalar</span>
+            <span className="hidden sm:inline">Instalar PWA</span>
           </button>
 
           {/* Role Pill Switcher */}
@@ -157,26 +173,54 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
             <span className="hidden sm:inline">{roleInfo.label}</span>
           </button>
 
-          {/* Backup / Room DB JSON */}
+          {/* Cloud Sync Status Indicator */}
+          <button
+            onClick={handleManualSync}
+            className={`p-2 rounded-xl transition-all flex items-center gap-1.5 text-xs font-semibold ${
+              syncState.status === 'synced'
+                ? 'text-emerald-300 hover:text-emerald-200 hover:bg-emerald-950/50'
+                : syncState.status === 'saving' || syncState.status === 'connecting'
+                ? 'text-amber-300 hover:text-amber-200 hover:bg-amber-950/50'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+            title={
+              syncState.status === 'synced'
+                ? `Datos guardados en la nube (Firestore) · Última sinc: ${syncState.lastSyncedAt || 'Ahora'}`
+                : syncState.status === 'saving'
+                ? 'Guardando cambios en la nube...'
+                : syncState.status === 'connecting'
+                ? 'Conectando con la nube de Google...'
+                : 'Modo sin conexión - Cambios guardados en local'
+            }
+          >
+            {syncState.status === 'synced' ? (
+              <>
+                <Cloud className="w-4 h-4 text-emerald-400" />
+                <span className="hidden md:inline text-[11px] text-emerald-400 font-bold">Nube</span>
+              </>
+            ) : syncState.status === 'saving' || syncState.status === 'connecting' ? (
+              <>
+                <RefreshCw className="w-4 h-4 text-amber-400 animate-spin" />
+                <span className="hidden md:inline text-[11px] text-amber-300 font-bold">Sincronizando</span>
+              </>
+            ) : (
+              <>
+                <CloudOff className="w-4 h-4 text-slate-400" />
+                <span className="hidden md:inline text-[11px] text-slate-400">Offline</span>
+              </>
+            )}
+          </button>
+
+          {/* Backup / JSON Export */}
           <button
             onClick={onOpenBackupModal}
             className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
-            title="Copia de Seguridad y Sincronización JSON (Room Offline)"
+            title="Copia de Seguridad y Sincronización JSON (Offline)"
           >
             <Database className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
           </button>
 
-          {/* Native Kotlin Code Reference */}
-          <button
-            onClick={onOpenKotlinModal}
-            className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl transition-colors hidden sm:flex items-center gap-1 text-xs"
-            title="Ver código fuente nativo Android Kotlin, Room y Jetpack Compose"
-          >
-            <Code2 className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
-            <span className="text-[11px] font-mono text-cyan-300 hidden md:inline">Kotlin</span>
-          </button>
-
-          {/* Toggle Mobile Android Phone Frame vs Responsive */}
+          {/* Toggle Device Frame Preview (Mobile vs Desktop View) */}
           <button
             onClick={onToggleMobileFrame}
             className={`p-2 rounded-xl transition-colors ${
@@ -184,7 +228,7 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
                 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' 
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
-            title={isMobileFrame ? 'Cambiar a vista completa de escritorio' : 'Simular marco de celular Android'}
+            title={isMobileFrame ? 'Cambiar a vista completa de escritorio' : 'Simular marco de celular'}
           >
             {isMobileFrame ? <Monitor className="w-4 h-4 sm:w-5 sm:h-5" /> : <Smartphone className="w-4 h-4 sm:w-5 sm:h-5" />}
           </button>

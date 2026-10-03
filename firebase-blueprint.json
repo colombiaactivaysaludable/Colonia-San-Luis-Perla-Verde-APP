@@ -1,0 +1,168 @@
+{
+  "entities": {
+    "Team": {
+      "title": "Team",
+      "description": "Configuración y perfil del equipo deportivo amateur",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 120 },
+        "category": { "type": "string", "maxLength": 60 },
+        "slogan": { "type": "string", "maxLength": 150 },
+        "primaryColor": { "type": "string", "maxLength": 30 },
+        "secondaryColor": { "type": "string", "maxLength": 30 },
+        "shieldIcon": { "type": "string", "maxLength": 30 },
+        "coachName": { "type": "string", "maxLength": 100 },
+        "foundedYear": { "type": "string", "maxLength": 10 },
+        "defaultArrivalMinutes": { "type": "number" },
+        "logoUrl": { "type": "string", "maxLength": 2048 },
+        "customHashtag": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "name", "category", "primaryColor", "shieldIcon"]
+    },
+    "Player": {
+      "title": "Player",
+      "description": "Ficha de jugador registrado en el club",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "teamId": { "type": "string", "maxLength": 128 },
+        "fullName": { "type": "string", "maxLength": 120 },
+        "nickname": { "type": "string", "maxLength": 60 },
+        "dorsal": { "type": "number" },
+        "position": { "type": "string", "maxLength": 30 },
+        "status": { "type": "string", "maxLength": 30 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "documentNumber": { "type": "string", "maxLength": 40 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "photoUrl": { "type": "string", "maxLength": 2048 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "teamId", "fullName", "dorsal", "position", "status", "phone"]
+    },
+    "Match": {
+      "title": "Match",
+      "description": "Partido programado o jugado por el equipo",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "teamId": { "type": "string", "maxLength": 128 },
+        "tournament": { "type": "string", "maxLength": 100 },
+        "rival": { "type": "string", "maxLength": 100 },
+        "date": { "type": "string", "maxLength": 20 },
+        "time": { "type": "string", "maxLength": 10 },
+        "venue": { "type": "string", "maxLength": 120 },
+        "totalRefereeFee": { "type": "number" },
+        "individualRefereeFee": { "type": "number" },
+        "status": { "type": "string", "maxLength": 30 },
+        "arrivalMinutes": { "type": "number" },
+        "requiredEquipment": { "type": "array" },
+        "customEquipment": { "type": "string", "maxLength": 100 },
+        "confirmationDeadline": { "type": "string", "maxLength": 50 },
+        "homeScore": { "type": "number" },
+        "awayScore": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "teamId", "tournament", "rival", "date", "time", "venue", "status"]
+    },
+    "Callup": {
+      "title": "Callup",
+      "description": "Convocatoria y confirmación de jugador a un partido",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "matchId": { "type": "string", "maxLength": 128 },
+        "playerId": { "type": "string", "maxLength": 128 },
+        "teamId": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "maxLength": 30 },
+        "confirmationStatus": { "type": "string", "maxLength": 30 },
+        "absenceReason": { "type": "string", "maxLength": 100 },
+        "confirmedAt": { "type": "string", "maxLength": 50 },
+        "attended": { "type": "boolean" }
+      },
+      "required": ["id", "matchId", "playerId", "teamId", "status"]
+    },
+    "Substitution": {
+      "title": "Substitution",
+      "description": "Sustitución de jugador durante un partido",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "matchId": { "type": "string", "maxLength": 128 },
+        "teamId": { "type": "string", "maxLength": 128 },
+        "playerOutId": { "type": "string", "maxLength": 128 },
+        "playerInId": { "type": "string", "maxLength": 128 },
+        "minute": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 200 }
+      },
+      "required": ["id", "matchId", "teamId", "playerOutId", "playerInId", "minute"]
+    },
+    "MatchPlayerStat": {
+      "title": "MatchPlayerStat",
+      "description": "Estadísticas de goles, asistencias y tarjetas de un jugador en un partido",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "matchId": { "type": "string", "maxLength": 128 },
+        "playerId": { "type": "string", "maxLength": 128 },
+        "teamId": { "type": "string", "maxLength": 128 },
+        "goals": { "type": "number" },
+        "assists": { "type": "number" },
+        "yellowCards": { "type": "number" },
+        "redCards": { "type": "number" },
+        "minutesPlayed": { "type": "number" }
+      },
+      "required": ["id", "matchId", "playerId", "teamId", "goals", "assists", "yellowCards", "redCards"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Registro de pago de arbitraje o cuota de equipo",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "teamId": { "type": "string", "maxLength": 128 },
+        "playerId": { "type": "string", "maxLength": 128 },
+        "matchId": { "type": "string", "maxLength": 128 },
+        "amount": { "type": "number" },
+        "date": { "type": "string", "maxLength": 20 },
+        "paymentMethod": { "type": "string", "maxLength": 40 },
+        "notes": { "type": "string", "maxLength": 200 },
+        "concept": { "type": "string", "maxLength": 120 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "teamId", "playerId", "amount", "date", "paymentMethod", "concept"]
+    }
+  },
+  "firestore": {
+    "/teams/{teamId}": {
+      "schema": "#/entities/Team",
+      "description": "Información general y colores de cada equipo deportivo"
+    },
+    "/players/{playerId}": {
+      "schema": "#/entities/Player",
+      "description": "Jugadores registrados con posición y dorsal"
+    },
+    "/matches/{matchId}": {
+      "schema": "#/entities/Match",
+      "description": "Partidos programados y disputados"
+    },
+    "/callups/{callupId}": {
+      "schema": "#/entities/Callup",
+      "description": "Convocatorias y confirmaciones de partido"
+    },
+    "/substitutions/{subId}": {
+      "schema": "#/entities/Substitution",
+      "description": "Historial de sustituciones por partido"
+    },
+    "/matchPlayerStats/{statId}": {
+      "schema": "#/entities/MatchPlayerStat",
+      "description": "Rendimiento individual y sanciones por partido"
+    },
+    "/payments/{paymentId}": {
+      "schema": "#/entities/Payment",
+      "description": "Contabilidad y pagos de cuotas"
+    }
+  }
+}
