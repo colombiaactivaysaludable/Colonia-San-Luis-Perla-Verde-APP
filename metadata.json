@@ -1,0 +1,6 @@
+{
+  "name": "TeamMaster - Gestión Deportiva Multiequipo",
+  "description": "App móvil de gestión deportiva amateur multiequipo con control de convocatorias, marcadores, sustituciones, pagos de arbitraje y estadísticas 100% offline.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
