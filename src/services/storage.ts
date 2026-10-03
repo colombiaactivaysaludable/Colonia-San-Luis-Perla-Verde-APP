@@ -113,7 +113,12 @@ class StorageService {
   }
 
   public mergeCloudCallups(cloudCallups: Callup[]) {
-    this.callups = cloudCallups;
+    if (!cloudCallups || cloudCallups.length === 0) return;
+    // Map using unique matchId_playerId key to prevent duplicates and ensure cloud sync accuracy
+    const map = new Map<string, Callup>();
+    this.callups.forEach((c) => map.set(`${c.matchId}_${c.playerId}`, c));
+    cloudCallups.forEach((c) => map.set(`${c.matchId}_${c.playerId}`, c));
+    this.callups = Array.from(map.values());
     saveToStorage(STORAGE_KEYS.CALLUPS, this.callups);
     this.notify();
   }
@@ -559,23 +564,29 @@ class StorageService {
     playerId: string,
     confirmation: 'Confirmado' | 'No Asiste',
     reason?: string
-  ): void {
+  ): Callup | null {
     const match = this.getMatchById(matchId);
-    if (!match) return;
+    if (!match) return null;
 
     let targetCallup: Callup;
     const idx = this.callups.findIndex((c) => c.matchId === matchId && c.playerId === playerId);
     const nowStr = new Date().toISOString();
 
     if (idx >= 0) {
-      this.callups[idx] = {
-        ...this.callups[idx],
+      const existing = this.callups[idx];
+      targetCallup = {
+        ...existing,
         status: confirmation === 'Confirmado' ? 'Convocado' : 'Inasistencia',
         confirmationStatus: confirmation,
-        absenceReason: confirmation === 'No Asiste' ? reason : undefined,
         confirmedAt: nowStr,
+        attended: existing.attended || false,
       };
-      targetCallup = this.callups[idx];
+      if (confirmation === 'No Asiste' && reason) {
+        targetCallup.absenceReason = reason;
+      } else {
+        delete targetCallup.absenceReason;
+      }
+      this.callups[idx] = targetCallup;
     } else {
       targetCallup = {
         id: `c_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -584,16 +595,19 @@ class StorageService {
         teamId: match.teamId,
         status: confirmation === 'Confirmado' ? 'Convocado' : 'Inasistencia',
         confirmationStatus: confirmation,
-        absenceReason: confirmation === 'No Asiste' ? reason : undefined,
         confirmedAt: nowStr,
         attended: false,
       };
+      if (confirmation === 'No Asiste' && reason) {
+        targetCallup.absenceReason = reason;
+      }
       this.callups.push(targetCallup);
     }
 
     saveToStorage(STORAGE_KEYS.CALLUPS, this.callups);
     this.dispatchCloudMutation('save', 'callup', targetCallup);
     this.notify();
+    return targetCallup;
   }
 
   // --- Substitutions (Cambios) Module ---

@@ -267,7 +267,11 @@ export const cloudSync = {
     updateState({ status: 'saving' });
     const path = `callups/${callup.id}`;
     try {
-      await setDoc(doc(db, 'callups', callup.id), callup);
+      const cleanData: Record<string, any> = {};
+      Object.entries(callup).forEach(([k, v]) => {
+        if (v !== undefined) cleanData[k] = v;
+      });
+      await setDoc(doc(db, 'callups', callup.id), cleanData, { merge: true });
       updateState({ status: 'synced', lastSyncedAt: new Date().toLocaleTimeString() });
     } catch (err) {
       updateState({ status: 'error' });

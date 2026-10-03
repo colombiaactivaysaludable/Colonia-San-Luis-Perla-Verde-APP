@@ -24,6 +24,8 @@ import {
 import { Match, Player, Callup, AbsenceReason } from '../../types';
 import { useStorage } from '../../hooks/useStorage';
 import { formatCurrency, formatDateSpanish } from '../../utils/whatsapp';
+import { db } from '../../services/firebase';
+import { collection, doc, setDoc, onSnapshot } from 'firebase/firestore';
 
 interface PublicConfirmationViewProps {
   matchId: string;
@@ -56,13 +58,73 @@ export const PublicConfirmationView: React.FC<PublicConfirmationViewProps> = ({
   const [feedbackSuccess, setFeedbackSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Subscribe to real-time updates
+  // Subscribe to local storage updates
   const [, setTick] = useState(0);
   useEffect(() => {
     const unsubscribe = storage.subscribe(() => {
       setTick((t) => t + 1);
     });
     return unsubscribe;
+  }, [storage]);
+
+  // Real-time Firestore synchronization for callups, matches, and players
+  useEffect(() => {
+    // 1. Listen to 'callups' collection in real-time
+    const unsubscribeCallups = onSnapshot(
+      collection(db, 'callups'),
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const cloudCallups: Callup[] = [];
+          snapshot.forEach((docSnap) => {
+            cloudCallups.push(docSnap.data() as Callup);
+          });
+          storage.mergeCloudCallups(cloudCallups);
+        }
+      },
+      (error) => {
+        console.warn('Real-time callups listener notice:', error);
+      }
+    );
+
+    // 2. Listen to 'matches' collection in real-time
+    const unsubscribeMatches = onSnapshot(
+      collection(db, 'matches'),
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const cloudMatches: Match[] = [];
+          snapshot.forEach((docSnap) => {
+            cloudMatches.push(docSnap.data() as Match);
+          });
+          storage.mergeCloudMatches(cloudMatches);
+        }
+      },
+      (error) => {
+        console.warn('Real-time matches listener notice:', error);
+      }
+    );
+
+    // 3. Listen to 'players' collection in real-time
+    const unsubscribePlayers = onSnapshot(
+      collection(db, 'players'),
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const cloudPlayers: Player[] = [];
+          snapshot.forEach((docSnap) => {
+            cloudPlayers.push(docSnap.data() as Player);
+          });
+          storage.mergeCloudPlayers(cloudPlayers);
+        }
+      },
+      (error) => {
+        console.warn('Real-time players listener notice:', error);
+      }
+    );
+
+    return () => {
+      unsubscribeCallups();
+      unsubscribeMatches();
+      unsubscribePlayers();
+    };
   }, [storage]);
 
   const match = storage.getMatchById(matchId);
@@ -164,18 +226,29 @@ export const PublicConfirmationView: React.FC<PublicConfirmationViewProps> = ({
   };
 
   // Confirm attendance
-  const handleConfirmAttendance = (willAttend: boolean) => {
-    if (!selectedPlayer) return;
+  const handleConfirmAttendance = async (willAttend: boolean) => {
+    if (!selectedPlayer || !match) return;
     setIsSubmitting(true);
 
     const statusChoice = willAttend ? 'Confirmado' : 'No Asiste';
     const reason = willAttend ? undefined : absenceReason;
 
     try {
-      storage.confirmPlayerCallup(match.id, selectedPlayer.id, statusChoice, reason);
+      // 1. Guardar localmente en el dispositivo (respuesta inmediata y copia offline)
+      const targetCallup = storage.confirmPlayerCallup(match.id, selectedPlayer.id, statusChoice, reason);
+
+      // 2. Guardar inmediatamente en Firebase Firestore con setDoc y merge: true
+      if (targetCallup) {
+        const cleanData: Record<string, any> = {};
+        Object.entries(targetCallup).forEach(([k, v]) => {
+          if (v !== undefined) cleanData[k] = v;
+        });
+        await setDoc(doc(db, 'callups', targetCallup.id), cleanData, { merge: true });
+      }
+
       setFeedbackSuccess(
         willAttend
-          ? `¡Excelente, ${selectedPlayer.fullName}! Tu asistencia ha sido confirmada. Nos vemos en la cancha.`
+          ? `¡Excelente, ${selectedPlayer.fullName}! Tu asistencia ha sido confirmada en tiempo real. Nos vemos en la cancha.`
           : `Entendido, ${selectedPlayer.fullName}. Se registró tu inasistencia por motivo de "${reason}".`
       );
       setIsVerified(false);
@@ -183,7 +256,8 @@ export const PublicConfirmationView: React.FC<PublicConfirmationViewProps> = ({
       setDocDigits('');
       setShowAbsencePicker(false);
     } catch (err: any) {
-      setVerificationError('Error al guardar la confirmación.');
+      console.error('Error al guardar en Firestore:', err);
+      setVerificationError(err?.message || 'Error al guardar la confirmación en la nube.');
     } finally {
       setIsSubmitting(false);
     }
